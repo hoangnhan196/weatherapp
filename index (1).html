@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Thời tiết</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Thời tiết">
+<meta name="theme-color" content="#2f7fd6">
+<style>
+:root{--b1:#2f7fd6;--b2:#8cc7f7;box-sizing:border-box}
+*,*::before,*::after{box-sizing:inherit}
+html[data-sky=cloud]{--b1:#56697c;--b2:#a3b5c5}
+html[data-sky=rain]{--b1:#2f4257;--b2:#6d8399}
+html[data-sky=storm]{--b1:#1c2430;--b2:#4a5565}
+html[data-sky=night]{--b1:#101a3b;--b2:#2d3d73}
+html{background:var(--b1)}
+body{margin:0;min-height:100vh;color:#fff;font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;background:linear-gradient(180deg,var(--b1),var(--b2));padding:calc(env(safe-area-inset-top,0px) + 12px) 16px calc(env(safe-area-inset-bottom,0px) + 28px)}
+main,.bar{max-width:520px;margin:0 auto}
+.bar{display:flex;gap:8px;position:relative}
+input{flex:1;min-width:0;-webkit-appearance:none;appearance:none;border:0;border-radius:12px;padding:12px 14px;font:inherit;color:#fff;background:rgba(255,255,255,.2);outline:none}
+input::placeholder{color:rgba(255,255,255,.75)}
+button{font:inherit;color:#fff;border:0;border-radius:12px;background:rgba(255,255,255,.2);padding:0 14px}
+:focus-visible{outline:2px solid #fff;outline-offset:2px}
+#res{position:absolute;top:100%;left:0;right:0;margin-top:6px;border-radius:12px;background:rgba(16,24,40,.96);z-index:5;overflow:hidden}
+#res div{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.12)}
+#res small{display:block;opacity:.7}
+.hero{text-align:center;padding:30px 0 10px}
+h1{margin:0;font-size:28px;font-weight:600}
+.temp{font-size:96px;font-weight:200;line-height:1.05;letter-spacing:-.02em}
+.cond{font-size:20px}
+.hl{display:flex;justify-content:center;gap:16px;opacity:.9;margin-top:4px}
+.card{background:rgba(255,255,255,.16);border-radius:16px;padding:14px;margin-top:14px;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+h2{margin:0 0 10px;font-size:14px;font-weight:600;opacity:.8}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.grid .card{margin:0}
+.big{font-size:26px;font-weight:500}
+.hours{display:flex;gap:16px;overflow-x:auto}
+.h{flex:none;min-width:48px;text-align:center}
+.e{font-size:24px;line-height:1.5}
+.day{display:grid;grid-template-columns:62px 28px 44px 32px 1fr 32px;align-items:center;gap:6px;padding:8px 0;border-top:1px solid rgba(255,255,255,.18)}
+.day small{opacity:.85}
+.lo{opacity:.7;text-align:right}
+.hi{text-align:right;font-weight:600}
+.trk{height:5px;border-radius:3px;background:rgba(255,255,255,.22);position:relative}
+.trk i{position:absolute;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,#7dd3fc,#fbbf24)}
+.msg{text-align:center;padding:48px 0}
+.src{text-align:center;opacity:.7;font-size:13px;margin-top:18px}
+</style>
+</head>
+<body>
+<div class="bar">
+  <input id="q" type="search" placeholder="Tìm thành phố" autocomplete="off" enterkeyhint="search" aria-label="Tìm thành phố">
+  <button id="gps" aria-label="Dùng vị trí của tôi">📍</button>
+  <button id="ref" aria-label="Làm mới">↻</button>
+  <div id="res"></div>
+</div>
+<main id="main"></main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// Mã thời tiết WMO -> [biểu tượng, mô tả]
+const W = {0:['☀️','Trời quang'],1:['🌤️','Gần như quang'],2:['⛅','Mây rải rác'],3:['☁️','Nhiều mây'],
+45:['🌫️','Sương mù'],48:['🌫️','Sương mù đóng băng'],51:['🌦️','Mưa phùn nhẹ'],53:['🌦️','Mưa phùn'],55:['🌦️','Mưa phùn dày'],
+56:['🌧️','Mưa phùn lạnh'],57:['🌧️','Mưa phùn lạnh'],61:['🌧️','Mưa nhẹ'],63:['🌧️','Mưa vừa'],65:['🌧️','Mưa to'],
+66:['🌧️','Mưa lạnh'],67:['🌧️','Mưa lạnh to'],71:['🌨️','Tuyết nhẹ'],73:['🌨️','Tuyết'],75:['❄️','Tuyết dày'],77:['🌨️','Hạt tuyết'],
+80:['🌦️','Mưa rào nhẹ'],81:['🌧️','Mưa rào'],82:['⛈️','Mưa rào lớn'],85:['🌨️','Tuyết rào'],86:['🌨️','Tuyết rào lớn'],
+95:['⛈️','Dông'],96:['⛈️','Dông kèm mưa đá'],99:['⛈️','Dông kèm mưa đá lớn']};
+const wx = (c, day = 1) => !day && c === 0 ? ['🌙','Trời quang'] : !day && c === 1 ? ['🌙','Gần như quang'] : !day && c === 2 ? ['☁️','Mây rải rác'] : (W[c] || ['🌡️','Không rõ']);
+const sky = (c, d) => !d ? 'night' : c >= 95 ? 'storm' : c >= 51 && c <= 86 ? 'rain' : c >= 2 ? 'cloud' : 'clear';
+
+let loc = null, last = 0;
+try { loc = JSON.parse(localStorage.getItem('wx_loc')); } catch (e) {}
+loc = loc || { name: 'Hồ Chí Minh', lat: 10.8231, lon: 106.6297 };
+const save = () => { try { localStorage.setItem('wx_loc', JSON.stringify(loc)); } catch (e) {} };
+
+async function load() {
+  $('#main').innerHTML = '<p class="msg">Đang tải…</p>';
+  try {
+    const u = 'https://api.open-meteo.com/v1/forecast?latitude=' + loc.lat + '&longitude=' + loc.lon +
+      '&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day' +
+      '&hourly=temperature_2m,weather_code,is_day' +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max' +
+      '&timezone=auto&forecast_days=7';
+    const r = await fetch(u);
+    if (!r.ok) throw new Error(r.status);
+    render(await r.json());
+    last = Date.now();
+  } catch (e) {
+    $('#main').innerHTML = '<p class="msg">Không tải được dữ liệu.<br>Kiểm tra kết nối mạng rồi bấm ↻ để thử lại.</p>';
+  }
+}
+
+function render(d) {
+  const c = d.current, D = d.daily, H = d.hourly, [ic, tx] = wx(c.weather_code, c.is_day);
+  document.documentElement.dataset.sky = sky(c.weather_code, c.is_day);
+
+  // 24 giờ tới, bắt đầu từ giờ hiện tại
+  const now = c.time.slice(0, 13);
+  let i = H.time.findIndex(t => t.slice(0, 13) >= now);
+  if (i < 0) i = 0;
+  const hrs = H.time.slice(i, i + 24).map((t, k) => {
+    const j = i + k;
+    return `<div class="h"><div>${k ? t.slice(11, 13) + 'h' : 'Bây giờ'}</div><div class="e">${wx(H.weather_code[j], H.is_day[j])[0]}</div><div>${Math.round(H.temperature_2m[j])}°</div></div>`;
+  }).join('');
+
+  // 7 ngày tới
+  const lo = Math.min(...D.temperature_2m_min), hi = Math.max(...D.temperature_2m_max), span = (hi - lo) || 1;
+  const names = ['CN','T2','T3','T4','T5','T6','T7'];
+  const days = D.time.map((t, k) => {
+    const a = D.temperature_2m_min[k], b = D.temperature_2m_max[k], p = D.precipitation_probability_max[k];
+    return `<div class="day"><span>${k ? names[new Date(t + 'T00:00').getDay()] : 'Hôm nay'}</span><span class="e">${wx(D.weather_code[k])[0]}</span><small>${p != null ? '💧' + p + '%' : ''}</small><span class="lo">${Math.round(a)}°</span><span class="trk"><i style="left:${(a - lo) / span * 100}%;width:${(b - a) / span * 100}%"></i></span><span class="hi">${Math.round(b)}°</span></div>`;
+  }).join('');
+
+  $('#main').innerHTML = `
+    <section class="hero">
+      <h1>${esc(loc.name)}</h1>
+      <div class="temp">${Math.round(c.temperature_2m)}°</div>
+      <div class="cond">${ic} ${tx}</div>
+      <div class="hl"><span>Cao nhất ${Math.round(D.temperature_2m_max[0])}°</span><span>Thấp nhất ${Math.round(D.temperature_2m_min[0])}°</span></div>
+    </section>
+    <div class="card"><h2>Theo giờ</h2><div class="hours">${hrs}</div></div>
+    <div class="card"><h2>7 ngày tới</h2>${days}</div>
+    <div class="grid">
+      <div class="card"><h2>Cảm giác như</h2><div class="big">${Math.round(c.apparent_temperature)}°</div></div>
+      <div class="card"><h2>Độ ẩm</h2><div class="big">${c.relative_humidity_2m}%</div></div>
+      <div class="card"><h2>Gió</h2><div class="big">${Math.round(c.wind_speed_10m)} km/h</div></div>
+      <div class="card"><h2>Khả năng mưa hôm nay</h2><div class="big">${D.precipitation_probability_max[0] ?? 0}%</div></div>
+    </div>
+    <p class="src">Cập nhật lúc ${c.time.slice(11, 16)}, dữ liệu từ Open-Meteo</p>`;
+}
+
+// Tìm thành phố
+let tm;
+$('#q').addEventListener('input', e => {
+  clearTimeout(tm);
+  const v = e.target.value.trim();
+  if (v.length < 2) { $('#res').innerHTML = ''; return; }
+  tm = setTimeout(async () => {
+    try {
+      const r = await fetch('https://geocoding-api.open-meteo.com/v1/search?count=5&language=vi&name=' + encodeURIComponent(v));
+      const a = (await r.json()).results || [];
+      $('#res').innerHTML = a.length
+        ? a.map((p, k) => `<div data-k="${k}">${esc(p.name)}<small>${esc([p.admin1, p.country].filter(Boolean).join(', '))}</small></div>`).join('')
+        : '<div>Không tìm thấy thành phố này</div>';
+      $('#res').onclick = ev => {
+        const n = ev.target.closest('[data-k]');
+        if (!n) return;
+        const p = a[n.dataset.k];
+        loc = { name: p.name, lat: p.latitude, lon: p.longitude };
+        save(); $('#q').value = ''; $('#res').innerHTML = ''; load();
+      };
+    } catch (err) {
+      $('#res').innerHTML = '<div>Lỗi mạng, thử lại sau</div>';
+    }
+  }, 300);
+});
+
+$('#gps').onclick = () => {
+  if (!navigator.geolocation) { alert('Thiết bị không hỗ trợ định vị.'); return; }
+  navigator.geolocation.getCurrentPosition(
+    p => { loc = { name: 'Vị trí của tôi', lat: p.coords.latitude, lon: p.coords.longitude }; save(); load(); },
+    () => alert('Không lấy được vị trí. Hãy cho phép Safari dùng vị trí trong Cài đặt.'),
+    { timeout: 10000 });
+};
+$('#ref').onclick = load;
+document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - last > 600000) load(); });
+load();
+</script>
+</body>
+</html>
