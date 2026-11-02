@@ -1,4 +1,5 @@
 # weatherapp
+feature:
 Nhiệt độ hiện tại, cảm giác như, độ ẩm, gió, khả năng mưa.
 Dự báo 24 giờ tới và 7 ngày tới.
 Tìm thành phố bất kỳ, nút 📍 để dùng vị trí hiện tại, nút ↻ để làm mới.
